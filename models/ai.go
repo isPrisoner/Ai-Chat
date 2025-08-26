@@ -1,5 +1,7 @@
 package models
 
+// Message/Request/Response 用于对接外部AI接口
+
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

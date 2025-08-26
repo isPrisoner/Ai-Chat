@@ -27,6 +27,15 @@ func main() {
 	}
 	utils.Info("配置加载完成")
 
+	// 初始化数据库
+	utils.Info("正在初始化数据库...")
+	if err := config.InitDatabase(); err != nil {
+		utils.Fatal("数据库初始化失败: %v", err)
+		return
+	}
+	defer config.CloseDatabase()
+	utils.Info("数据库初始化完成")
+
 	// 创建 Gin 引擎
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -40,9 +49,19 @@ func main() {
 		c.Redirect(http.StatusFound, "/web/index.html")
 	})
 
-	// 仅保留聊天路由
+	// 聊天路由
 	r.POST("/chat", handlers.ChatHandler)
-	utils.Info("API路由已注册")
+	utils.Info("聊天API路由已注册")
+
+	// 会话管理路由
+	sessionHandler := handlers.NewSessionHandler()
+	r.GET("/api/sessions", sessionHandler.GetSessions)
+	r.POST("/api/sessions", sessionHandler.CreateSession)
+	r.GET("/api/sessions/:id", sessionHandler.GetSession)
+	r.PUT("/api/sessions/:id", sessionHandler.UpdateSession)
+	r.DELETE("/api/sessions/:id", sessionHandler.DeleteSession)
+	r.GET("/api/sessions/:id/messages", sessionHandler.GetSessionMessages)
+	utils.Info("会话管理API路由已注册")
 
 	utils.Info("🚀 服务已启动，请在浏览器访问: http://localhost:8080")
 

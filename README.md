@@ -6,14 +6,24 @@
 
 ```
 AiDemo/
-  ├── config/          # 配置管理
-  ├── handlers/        # HTTP请求处理器
-  ├── init/            # 初始化和环境变量配置
-  ├── models/          # 数据模型
-  ├── services/        # 业务逻辑服务
-  ├── utils/           # 工具类（日志系统等）
+  ├── config/          # 配置管理（环境变量、数据库初始化）
+  ├── handlers/        # HTTP 请求处理层（仅编排与入参/出参绑定，无业务、无结构体定义）
+  ├── init/            # 日志与运行期初始化
+  ├── models/          # 领域与DTO模型（按模块聚合：同一模块的结构体放一个文件）
+  │   ├── session.go   # 会话模块：Session、ChatMessage、SessionWithMessageCount、会话请求DTO
+  │   ├── chat.go      # 聊天模块：ChatRequest、ChatResponse
+  │   └── ai.go        # AI模块：Message、RequestBody、Choice、ResponseBody
+  ├── services/        # 业务服务层（数据库读写、第三方API、领域规则）
+  ├── utils/           # 通用工具（日志、ID生成等）
   └── web/             # 前端页面
 ```
+
+- 责任边界
+  - `handlers/`: 负责 HTTP 路由与请求/响应绑定、调用 `services`，不得定义结构体。
+  - `models/`: 存放所有持久化实体、请求/响应 DTO、外部API消息体；按模块聚合（session/chat/ai），每个模块一个文件；禁止包含业务逻辑。
+  - `services/`: 封装业务流程与数据访问；可依赖 `config.DB`、调用第三方服务；不直接处理 HTTP。
+  - `config/`: 环境变量加载、数据库初始化与关闭。
+  - `utils/`: 工具库与日志等跨层功能，含 `utils/id.go` 生成会话ID。
 
 ## 主要功能
 
@@ -55,7 +65,7 @@ go mod tidy
 
 3. 配置环境
 
-编辑 `init/init.env` 文件，设置您的API密钥：
+编辑 `init/initApi.env` 文件，设置您的API密钥：
 
 ```
 DOUBAO_API_KEY=YOUR_API_KEY
@@ -86,12 +96,8 @@ go run main.go
 响应:
 ```json
 {
-  "code": 200,
-  "message": "成功",
-  "data": {
-    "reply": "你好！我是AI助手，有什么可以帮助你的？",
-    "session_id": "session-id"
-  }
+  "reply": "你好！我是AI助手，有什么可以帮助你的？",
+  "session_id": "session-id"
 }
 ```
 
@@ -167,10 +173,10 @@ init.DisableLogRotate()
 
 ```go
 // 设置为JSON格式输出
-utils.SetFormat(utils.JSON_FORMAT)
+utils.SetFormat(utils.JsonFormat)
 
 // 设置回文本格式
-utils.SetFormat(utils.TEXT_FORMAT)
+utils.SetFormat(utils.TextFormat)
 ```
 
 #### 使用带字段的日志
@@ -222,30 +228,6 @@ utils.Close()
 1. 致命错误（FATAL）日志会强制同步写入，确保在程序退出前记录
 2. 当缓冲区已满时，会自动回退到同步写入模式
 3. 应用退出前应调用`utils.Close()`确保所有日志都被写入
-
-### 自定义日志记录器
-
-如果需要创建独立的日志记录器，可以使用：
-
-```go
-// 创建自定义日志记录器
-logger := utils.NewLogger(utils.DEBUG, "./logs/custom.log", true)
-
-// 使用自定义记录器记录日志
-logger.Debug("自定义记录器的调试信息")
-logger.Info("自定义记录器的普通信息")
-
-// 关闭自定义记录器
-defer logger.Close()
-```
-
-### 日志系统注意事项
-
-1. 日志文件会自动创建，但需要确保应用有权限写入指定目录
-2. 在应用退出前应调用 `utils.Close()` 关闭日志文件
-3. 日志轮转发生在写日志时检查，如果长时间没有日志写入，可能不会立即轮转
-4. 当前实现不会自动清理或压缩旧日志文件，需要外部工具管理
-5. 使用异步日志时，应确保在应用退出前调用 `utils.Close()` 或 `utils.Flush()`
 
 ## 许可证
 
