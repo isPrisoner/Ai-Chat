@@ -83,6 +83,65 @@
             padding: 10px;
         }
 
+        .ingest-panel {
+            border-top: 1px solid var(--border-color);
+            padding: 12px 14px 16px;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .ingest-title {
+            font-size: 0.95em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #dcdcdc;
+        }
+
+        .ingest-input,
+        .ingest-textarea,
+        .ingest-select {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: rgba(15, 22, 36, 0.7);
+            color: var(--text-color);
+            font-size: 0.9em;
+            outline: none;
+        }
+
+        .ingest-input:focus,
+        .ingest-textarea:focus,
+        .ingest-select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.2);
+        }
+
+        .ingest-textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+
+        .ingest-btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: white;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        .ingest-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
         .session-item {
             padding: 12px;
             margin-bottom: 8px;
@@ -238,6 +297,47 @@
             flex-direction: column;
             gap: 15px;
             background-image: radial-gradient(circle at center, rgba(30, 40, 60, 0.4) 0%, rgba(15, 22, 36, 0.2) 100%);
+        }
+
+        .control-bar {
+            display: flex;
+            gap: 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.03);
+            align-items: center;
+        }
+
+        .control-bar label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.85em;
+            color: #dcdcdc;
+        }
+
+        .control-input,
+        .control-select {
+            min-width: 100px;
+            padding: 6px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: rgba(15, 22, 36, 0.7);
+            color: var(--text-color);
+            outline: none;
+        }
+
+        .control-input:focus,
+        .control-select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.2);
+        }
+
+        .control-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         .message {
@@ -522,6 +622,20 @@
         <div class="sessions-list" id="sessions-list">
             <!-- 会话列表将在这里动态添加 -->
         </div>
+
+        <!-- 知识入库面板 -->
+        <div class="ingest-panel">
+            <div class="ingest-title">
+                <i class="fas fa-database"></i> 知识入库
+            </div>
+            <input id="ingest-title" class="ingest-input" placeholder="标题（必填）">
+            <textarea id="ingest-content" class="ingest-textarea" placeholder="内容（必填）"></textarea>
+            <input id="ingest-source" class="ingest-input" placeholder="来源，默认 manual">
+            <input id="ingest-namespace" class="ingest-input" placeholder="命名空间，默认 default">
+            <button class="ingest-btn" onclick="ingestKnowledge()">
+                <i class="fas fa-upload"></i> 提交知识
+            </button>
+        </div>
     </div>
 
     <!-- 主内容区域 -->
@@ -542,6 +656,31 @@
                 <option value="scholar">学术导师</option>
             </select>
         </header>
+
+        <!-- RAG 控制条 -->
+        <div class="control-bar">
+            <div class="control-row">
+                <label>
+                    模式
+                    <select id="mode-select" class="control-select" title="选择对话模式">
+                        <option value="chat">普通对话</option>
+                        <option value="rag" selected>RAG 增强</option>
+                    </select>
+                </label>
+                <label>
+                    命名空间
+                    <input id="namespace-input" class="control-input" placeholder="如 golang/faq，可空">
+                </label>
+                <label>
+                    TopK
+                    <input id="topk-input" class="control-input" type="number" min="1" max="10" value="3">
+                </label>
+                <label style="flex-direction: row; gap: 6px; align-items: center; margin-top: 18px;">
+                    <input id="debug-checkbox" type="checkbox">
+                    返回调试信息
+                </label>
+            </div>
+        </div>
 
         <div id="chat-box">
             <!-- 消息将在这里动态添加 -->

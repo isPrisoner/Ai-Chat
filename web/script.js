@@ -171,6 +171,15 @@ async function sendMessage() {
     const roleSelect = document.getElementById("role-select");
     const message = inputElement.value.trim();
     const role = roleSelect ? roleSelect.value : "general";
+    const modeSelect = document.getElementById("mode-select");
+    const namespaceInput = document.getElementById("namespace-input");
+    const topkInput = document.getElementById("topk-input");
+    const debugCheckbox = document.getElementById("debug-checkbox");
+
+    const mode = modeSelect ? modeSelect.value : "rag";
+    const namespace = namespaceInput ? namespaceInput.value.trim() : "";
+    const topK = topkInput ? parseInt(topkInput.value, 10) || 3 : 3;
+    const debug = debugCheckbox ? debugCheckbox.checked : false;
 
     if (!message) return;
     if (!currentSessionId) {
@@ -190,14 +199,32 @@ async function sendMessage() {
     scrollToBottom();
 
     try {
-        const response = await fetch("/chat", {
+        let url = "/chat";
+        let payload = {
+            message,
+            role,
+            session_id: currentSessionId
+        };
+
+        // 如果选择 RAG 模式，则走 /rag/chat
+        if (mode === "rag") {
+            url = "/rag/chat";
+            payload = {
+                query: message,
+                mode: "rag",
+                namespace: namespace || undefined,
+                top_k: topK,
+                debug: debug
+            };
+        } else if (mode === "normal") {
+            // 明确 normal，还是走 /chat，但便于后续扩展
+            url = "/chat";
+        }
+
+        const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                message,
-                role,
-                session_id: currentSessionId
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) throw new Error("HTTP " + response.status);
@@ -209,7 +236,18 @@ async function sendMessage() {
 
         // 更新AI回复
         aiEl.textContent = "AI: ";
-        typeText(aiEl, data.reply || "出错了，请稍后再试");
+        const answer = data.reply || data.answer || "出错了，请稍后再试";
+        typeText(aiEl, answer);
+
+        // 如果是 RAG 模式且开启 debug，附带命中文档信息
+        if (mode === "rag" && debug && data.hit_docs && Array.isArray(data.hit_docs) && data.hit_docs.length > 0) {
+            addMessageToChat("命中文档: " + data.hit_docs.join(" | "), "system-message");
+        }
+
+        // 显示兜底信息
+        if (mode === "rag" && data.fallback) {
+            addMessageToChat("提示：知识库无命中，已退化为普通对话。", "system-message");
+        }
 
         // 刷新会话列表
         await loadSessions();
@@ -219,6 +257,52 @@ async function sendMessage() {
         aiEl.textContent = "AI: 出错了，请稍后再试";
         aiEl.classList.remove('typing');
         waitingForAIResponse = false;
+    }
+}
+
+// 知识入库
+async function ingestKnowledge() {
+    const titleEl = document.getElementById("ingest-title");
+    const contentEl = document.getElementById("ingest-content");
+    const sourceEl = document.getElementById("ingest-source");
+    const nsEl = document.getElementById("ingest-namespace");
+
+    const title = titleEl.value.trim();
+    const content = contentEl.value.trim();
+    const source = (sourceEl.value || "manual").trim();
+    const namespace = (nsEl.value || "default").trim();
+
+    if (!title || !content) {
+        alert("请输入标题和内容");
+        return;
+    }
+
+    try {
+        const resp = await fetch("/rag/knowledge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title,
+                content,
+                source,
+                namespace
+            })
+        });
+
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+        const data = await resp.json();
+        const chunks = data.chunks || (data.knowledges ? data.knowledges.length : 0);
+        alert(`入库成功，片段数：${chunks}`);
+
+        // 清空表单
+        titleEl.value = "";
+        contentEl.value = "";
+        sourceEl.value = "";
+        nsEl.value = "";
+    } catch (e) {
+        console.error("知识入库失败:", e);
+        alert("知识入库失败: " + e.message);
     }
 }
 
