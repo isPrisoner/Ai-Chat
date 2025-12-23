@@ -4,12 +4,16 @@ import (
 	"net/http"
 
 	"AiDemo/handlers"
+	"AiDemo/router/middleware"
 	"AiDemo/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 func Register(r *gin.Engine) {
+	// 简单限流（可按需调整或关闭）
+	r.Use(middleware.RateLimiter(120)) // 每 IP 每分钟 120 次
+
 	// 静态资源
 	r.Static("/web", "./web")
 	utils.Info("静态文件路由已配置")

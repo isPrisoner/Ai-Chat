@@ -19,12 +19,13 @@ type RAGChatRequest struct {
 
 // RAGChatResponse RAG 聊天响应体
 type RAGChatResponse struct {
-	Answer    string   `json:"answer"`
-	Mode      string   `json:"mode"`
-	DocsCount int      `json:"docs_count"`
-	Namespace string   `json:"namespace,omitempty"`
-	HitDocs   []string `json:"hit_docs,omitempty"`
-	Fallback  bool     `json:"fallback,omitempty"`
+	Answer    string    `json:"answer"`
+	Mode      string    `json:"mode"`
+	DocsCount int       `json:"docs_count"`
+	Namespace string    `json:"namespace,omitempty"`
+	HitDocs   []string  `json:"hit_docs,omitempty"`
+	Scores    []float64 `json:"scores,omitempty"`
+	Fallback  bool      `json:"fallback,omitempty"`
 }
 
 // RAGChatHandler 基于 RAG 的问答接口
@@ -61,17 +62,23 @@ func RAGChatHandler(c *gin.Context) {
 	}
 
 	var docs []models.Knowledge
+	var scored []services.ScoredDoc
 	var err error
 
 	if req.Namespace != "" {
-		docs, err = services.RetrieveRelevantDocsByNamespace(req.Query, req.Namespace, req.TopK)
+		scored, err = services.RetrieveRelevantDocsWithScores(req.Query, req.Namespace, req.TopK)
 	} else {
-		docs, err = services.RetrieveRelevantDocs(req.Query, req.TopK)
+		scored, err = services.RetrieveRelevantDocsWithScores(req.Query, "", req.TopK)
 	}
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "检索知识库失败: " + err.Error()})
 		return
+	}
+
+	// 提取文档列表和分数
+	for _, s := range scored {
+		docs = append(docs, s.Doc)
 	}
 
 	// 知识库无命中时，退化为普通对话
@@ -86,9 +93,11 @@ func RAGChatHandler(c *gin.Context) {
 		}
 
 		c.JSON(http.StatusOK, RAGChatResponse{
-			Answer:    answer,
+			Answer:    "未找到相关知识，使用普通模式回答：" + answer,
 			Mode:      "fallback",
 			DocsCount: 0,
+			HitDocs:   []string{},
+			Scores:    []float64{},
 			Fallback:  true,
 		})
 		return
@@ -107,10 +116,12 @@ func RAGChatHandler(c *gin.Context) {
 		return
 	}
 
-	hitDocs := make([]string, 0, len(docs))
+	hitDocs := make([]string, 0, len(scored))
+	scores := make([]float64, 0, len(scored))
 	if req.Debug {
-		for _, doc := range docs {
-			hitDocs = append(hitDocs, doc.Title)
+		for _, s := range scored {
+			hitDocs = append(hitDocs, s.Doc.Title)
+			scores = append(scores, s.Score)
 		}
 	}
 
@@ -120,6 +131,7 @@ func RAGChatHandler(c *gin.Context) {
 		DocsCount: len(docs),
 		Namespace: req.Namespace,
 		HitDocs:   hitDocs,
+		Scores:    scores,
 		Fallback:  false,
 	})
 }

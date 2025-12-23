@@ -240,8 +240,15 @@ async function sendMessage() {
         typeText(aiEl, answer);
 
         // 如果是 RAG 模式且开启 debug，附带命中文档信息
-        if (mode === "rag" && debug && data.hit_docs && Array.isArray(data.hit_docs) && data.hit_docs.length > 0) {
-            addMessageToChat("命中文档: " + data.hit_docs.join(" | "), "system-message");
+        if (mode === "rag" && debug && data.hit_docs && Array.isArray(data.hit_docs)) {
+            let info = "命中文档: ";
+            const names = data.hit_docs.length > 0 ? data.hit_docs.join(" | ") : "无";
+            info += names;
+            if (data.scores && Array.isArray(data.scores) && data.scores.length > 0) {
+                const scoreText = data.scores.map(s => s.toFixed(3)).join(" | ");
+                info += "；相似度: " + scoreText;
+            }
+            addMessageToChat(info, "system-message");
         }
 
         // 显示兜底信息

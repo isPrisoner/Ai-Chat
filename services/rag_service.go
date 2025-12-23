@@ -17,20 +17,20 @@ const (
 	MinSimilarityThreshold = 0.0
 )
 
-// SaveKnowledge 文档入库，自动进行embedding和切分
+// SaveKnowledge 文档入库，自动切分+批量向量化
 func SaveKnowledge(title, content, source, namespace string) ([]*models.Knowledge, error) {
 	chunks := ChunkText(content, DefaultChunkSize)
 
-	var results []*models.Knowledge
 	embeddingModel := GetEmbeddingModelVersion()
+	vecs, err := EmbedTextBatch(chunks)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []*models.Knowledge
 
 	for i, chunk := range chunks {
-		vec, err := EmbedText(chunk)
-		if err != nil {
-			return nil, err
-		}
-
-		vecBytes, err := json.Marshal(vec)
+		vecBytes, err := json.Marshal(vecs[i])
 		if err != nil {
 			return nil, err
 		}
@@ -63,8 +63,8 @@ func SaveKnowledge(title, content, source, namespace string) ([]*models.Knowledg
 	return results, nil
 }
 
-// RetrieveRelevantDocs 根据查询语句检索相关文档
-func RetrieveRelevantDocs(query string, topK int) ([]models.Knowledge, error) {
+// RetrieveRelevantDocsWithScores 返回带相似度分数的结果
+func RetrieveRelevantDocsWithScores(query, namespace string, topK int) ([]ScoredDoc, error) {
 	if topK <= 0 {
 		topK = DefaultTopK
 	}
@@ -74,127 +74,31 @@ func RetrieveRelevantDocs(query string, topK int) ([]models.Knowledge, error) {
 		return nil, err
 	}
 
-	var all []models.Knowledge
-	if err := config.DB.Find(&all).Error; err != nil {
+	return defaultVectorStore.Search(queryVec, namespace, topK)
+}
+
+// RetrieveRelevantDocs 根据查询语句检索相关文档
+func RetrieveRelevantDocs(query string, topK int) ([]models.Knowledge, error) {
+	scored, err := RetrieveRelevantDocsWithScores(query, "", topK)
+	if err != nil {
 		return nil, err
 	}
-	if len(all) == 0 {
-		return []models.Knowledge{}, nil
-	}
-
-	type scored struct {
-		Doc   models.Knowledge
-		Score float64
-	}
-
-	var scoredDocs []scored
-	for _, d := range all {
-		if d.Vector == "" {
-			continue
-		}
-		var vec []float64
-		if err := json.Unmarshal([]byte(d.Vector), &vec); err != nil {
-			continue
-		}
-		s := cosineSimilarity(queryVec, vec)
-		if s >= MinSimilarityThreshold {
-			scoredDocs = append(scoredDocs, scored{Doc: d, Score: s})
-		}
-	}
-
-	if len(scoredDocs) == 0 {
-		return []models.Knowledge{}, nil
-	}
-
-	// 排序并截取TopK
-	for i := 0; i < len(scoredDocs)-1; i++ {
-		maxIdx := i
-		for j := i + 1; j < len(scoredDocs); j++ {
-			if scoredDocs[j].Score > scoredDocs[maxIdx].Score {
-				maxIdx = j
-			}
-		}
-		scoredDocs[i], scoredDocs[maxIdx] = scoredDocs[maxIdx], scoredDocs[i]
-	}
-
-	limit := topK
-	if len(scoredDocs) < topK {
-		limit = len(scoredDocs)
-	}
-
-	result := make([]models.Knowledge, 0, limit)
-	for i := 0; i < limit; i++ {
-		result = append(result, scoredDocs[i].Doc)
+	result := make([]models.Knowledge, 0, len(scored))
+	for _, s := range scored {
+		result = append(result, s.Doc)
 	}
 	return result, nil
 }
 
 // RetrieveRelevantDocsByNamespace 根据命名空间检索相关文档
 func RetrieveRelevantDocsByNamespace(query string, namespace string, topK int) ([]models.Knowledge, error) {
-	if topK <= 0 {
-		topK = DefaultTopK
-	}
-
-	queryVec, err := EmbedText(query)
+	scored, err := RetrieveRelevantDocsWithScores(query, namespace, topK)
 	if err != nil {
 		return nil, err
 	}
-
-	var all []models.Knowledge
-	queryDB := config.DB
-	if namespace != "" {
-		queryDB = queryDB.Where("namespace = ?", namespace)
-	}
-	if err := queryDB.Find(&all).Error; err != nil {
-		return nil, err
-	}
-	if len(all) == 0 {
-		return []models.Knowledge{}, nil
-	}
-
-	type scored struct {
-		Doc   models.Knowledge
-		Score float64
-	}
-
-	var scoredDocs []scored
-	for _, d := range all {
-		if d.Vector == "" {
-			continue
-		}
-		var vec []float64
-		if err := json.Unmarshal([]byte(d.Vector), &vec); err != nil {
-			continue
-		}
-		s := cosineSimilarity(queryVec, vec)
-		if s >= MinSimilarityThreshold {
-			scoredDocs = append(scoredDocs, scored{Doc: d, Score: s})
-		}
-	}
-
-	if len(scoredDocs) == 0 {
-		return []models.Knowledge{}, nil
-	}
-
-	// 排序并截取TopK
-	for i := 0; i < len(scoredDocs)-1; i++ {
-		maxIdx := i
-		for j := i + 1; j < len(scoredDocs); j++ {
-			if scoredDocs[j].Score > scoredDocs[maxIdx].Score {
-				maxIdx = j
-			}
-		}
-		scoredDocs[i], scoredDocs[maxIdx] = scoredDocs[maxIdx], scoredDocs[i]
-	}
-
-	limit := topK
-	if len(scoredDocs) < topK {
-		limit = len(scoredDocs)
-	}
-
-	result := make([]models.Knowledge, 0, limit)
-	for i := 0; i < limit; i++ {
-		result = append(result, scoredDocs[i].Doc)
+	result := make([]models.Knowledge, 0, len(scored))
+	for _, s := range scored {
+		result = append(result, s.Doc)
 	}
 	return result, nil
 }
