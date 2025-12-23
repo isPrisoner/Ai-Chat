@@ -23,6 +23,14 @@ func Register(r *gin.Engine) {
 	r.POST("/chat", handlers.ChatHandler)
 	utils.Info("聊天 API 已注册")
 
+	// RAG 聊天接口（增强版，支持模式区分和多知识域）
+	r.POST("/rag/chat", handlers.RAGChatHandler)
+	utils.Info("RAG 聊天 API 已注册")
+
+	// 知识入库接口（关键：RAG 从 Demo 到产品的核心接口）
+	r.POST("/rag/knowledge", handlers.CreateKnowledgeHandler)
+	utils.Info("知识入库 API 已注册")
+
 	// 会话管理
 	sessionHandler := handlers.NewSessionHandler()
 

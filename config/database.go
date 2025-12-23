@@ -33,8 +33,12 @@ func InitDatabase() error {
 		return err
 	}
 
-	// 自动迁移数据库表
-	if err := DB.AutoMigrate(&models.Session{}, &models.ChatMessage{}); err != nil {
+	// 自动迁移数据库表（会话、消息、知识库）
+	if err := DB.AutoMigrate(
+		&models.Session{},
+		&models.ChatMessage{},
+		&models.Knowledge{},
+	); err != nil {
 		return err
 	}
 
@@ -47,7 +51,10 @@ func CloseDatabase() {
 	if DB != nil {
 		sqlDB, err := DB.DB()
 		if err == nil {
-			sqlDB.Close()
+			err := sqlDB.Close()
+			if err != nil {
+				return
+			}
 		}
 	}
 }

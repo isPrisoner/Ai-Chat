@@ -28,6 +28,12 @@ AiDemo/
 ## 主要功能
 
 - 基于会话ID的多用户聊天
+- **企业级 RAG（检索增强生成）系统**
+  - 知识库管理（自动向量化、SQLite 存储）
+  - 向量检索（余弦相似度算法，支持 TopK 调整）
+  - 多知识域支持（Namespace）
+  - 模式区分（RAG 增强 / 普通对话）
+  - Prompt 模板化（可调优、支持 A/B 测试）
 - 完整的日志记录系统（支持按天轮转）
 - 基于环境的配置管理
 - RESTful API接口
@@ -100,6 +106,142 @@ go run main.go
   "session_id": "session-id"
 }
 ```
+
+### RAG 聊天接口（知识增强）
+
+**POST /rag/chat**
+
+支持模式区分、多知识域检索、兜底策略和调试信息。
+
+请求体:
+```json
+{
+  "query": "什么是 Go 语言？",
+  "mode": "rag",           // 模式：rag（知识增强，默认）/ normal（普通对话）
+  "namespace": "golang",   // 知识域：golang / company-doc / faq 等，为空则检索全部
+  "top_k": 3,              // 检索文档数量，默认 3
+  "debug": false           // 是否返回调试信息（命中文档列表），默认 false
+}
+```
+
+响应（RAG 模式）:
+```json
+{
+  "answer": "Go 是一种静态类型编译语言...",
+  "mode": "rag",
+  "docs_count": 3,
+  "namespace": "golang",
+  "hit_docs": ["Go 语言简介", "Go 特点"],  // debug=true 时返回
+  "fallback": false
+}
+```
+
+响应（兜底模式，知识库无命中时）:
+```json
+{
+  "answer": "根据我的理解...",
+  "mode": "fallback",
+  "docs_count": 0,
+  "fallback": true
+}
+```
+
+### 知识入库接口（关键接口）
+
+**POST /rag/knowledge**
+
+接收文本，自动进行 embedding，存入 SQLite。这是 RAG 从 Demo 到产品的核心接口。
+
+请求体:
+```json
+{
+  "title": "Go 语言简介",
+  "content": "Go 是一种静态类型编译语言，由 Google 开发...",
+  "source": "manual",      // 来源：manual / file / api 等，默认为 "manual"
+  "namespace": "golang"    // 知识域：golang / company-doc / faq 等，默认为 "default"
+}
+```
+
+响应（单片段）:
+```json
+{
+  "knowledges": [
+    {
+      "id": "k_1234567890",
+      "title": "Go 语言简介",
+      "content": "Go 是一种静态类型编译语言...",
+      "source": "manual",
+      "namespace": "golang",
+      "embedding_model": "mock-v1",
+      "created_at": "2024-01-01T12:00:00Z"
+    }
+  ],
+  "chunks": 1,
+  "message": "知识入库成功，已自动完成向量化"
+}
+```
+
+响应（多片段，长文档自动切分）:
+```json
+{
+  "knowledges": [
+    {
+      "id": "k_1234567890",
+      "title": "Go 语言简介 (片段 1/3)",
+      "content": "...",
+      "embedding_model": "mock-v1"
+    },
+    {
+      "id": "k_1234567891",
+      "title": "Go 语言简介 (片段 2/3)",
+      "content": "...",
+      "embedding_model": "mock-v1"
+    }
+  ],
+  "chunks": 3,
+  "message": "知识入库成功，已自动切分为 3 个片段并完成向量化"
+}
+```
+
+## RAG 技术说明
+
+### RAG 架构流程图
+
+```
+用户问题
+  ↓
+Embedding（向量化）
+  ↓
+SQLite 向量匹配（余弦相似度）
+  ↓
+TopK 文档检索
+  ↓
+Prompt 构建（模板化）
+  ↓
+LLM 生成答案
+  ↓
+返回结果（含调试信息）
+```
+
+**兜底策略**：当知识库无命中时，系统自动退化为普通 LLM 对话，保证可用性。
+
+### 向量检索算法
+
+当前使用**余弦相似度（Cosine Similarity）**进行向量匹配，支持 TopK 调整。
+
+- **相似度算法**：余弦相似度，范围 [-1, 1]，值越大表示越相似
+- **默认 TopK**：3（可在请求中通过 `top_k` 参数调整）
+- **相似度阈值**：当前为 0.0（不过滤），可根据实际效果调整 `MinSimilarityThreshold` 常量
+
+### 架构特点
+
+1. **Prompt 模板化**：独立的 `services/rag_prompt.go`，支持自定义模板，便于调优和 A/B 测试
+2. **多知识域支持**：通过 `namespace` 字段实现知识域隔离，支持多知识库并行管理
+3. **模式区分**：支持 RAG 增强模式和普通对话模式，体现 AI 能力编排思维
+4. **可扩展性**：Embedding 服务层独立，可无缝替换为 Doubao / OpenAI / DashScope 等真实向量模型
+5. **文档切分（Chunking）**：自动将长文档切分为 500 字片段，提升检索精度
+6. **Embedding 版本管理**：记录 embedding 模型版本，支持模型升级与重建索引
+7. **调试信息**：支持返回命中文档列表，便于调试和解释 RAG 效果
 
 ## 日志系统
 
